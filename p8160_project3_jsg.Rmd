@@ -1,0 +1,159 @@
+---
+title: "p8160_project3_jsg"
+author: "Jared Garfinkel"
+date: "4/21/2020"
+output: github_document
+---
+
+```{r setup, include=FALSE}
+library(tidyverse)
+library(viridis)
+library(corrplot)
+knitr::opts_chunk$set(
+	echo = TRUE,
+	warning = FALSE,
+	fig.width = 8, 
+  fig.height = 6,
+  out.width = "90%"
+)
+options(
+  ggplot2.continuous.colour = "viridis",
+  ggplot2.continuous.fill = "viridis"
+)
+scale_colour_discrete = scale_colour_viridis_d
+scale_fill_discrete = scale_fill_viridis_d
+theme_set(theme_minimal() + theme(legend.position = "bottom"))
+```
+
+```{r}
+df = read_csv("./covid_final.csv") %>% 
+  janitor::clean_names() %>% 
+  mutate(province_state = factor(province_state),
+         country_region = factor(country_region),
+         date = as.Date(date, "%m/%d/%y"))
+
+df_raw = df %>% 
+  dplyr::select(lat, long, confirmed_cases, fatalities) %>% 
+  drop_na()
+```
+
+```{r}
+# correlation matrix
+res <- round(cor(df_raw) %>% as.matrix(), 2)
+
+corrplot(res, type = "upper", order = "hclust", 
+         tl.col = "black", tl.srt = 45, tl.cex = 0.45)
+
+cor(df_raw)
+```
+
+```{r}
+df_filtered = df %>% 
+  dplyr::select(everything(), confirmed_cases, -fatalities)
+
+y = df_filtered %>% 
+  pull(confirmed_cases)
+
+x = df_filtered %>% 
+  dplyr::select(province_state:date) %>% 
+  mutate(date = factor(date),
+         date = fct_inorder(date))
+
+dat = cbind(y, x)
+```
+
+```{r, eval = FALSE}
+log_lik = function(cumsum = pull(dat, y), params = list(a = 1000, b = 2, c = 100)) {
+  dat %>% group_by(country_region, province_state)
+  t = 0
+  while (y > 0) {
+    t = t + 1
+  }
+  for (i in 1:n_distinct(pull(dat, country_region))) {
+    like[i] = params$a / (1 + exp(-params$b * (t - params$c)))
+    log_lik = log(like)
+    return(log_lik)
+}
+
+log_lik()
+```
+
+```{r, cache = TRUE, eval = FALSE}
+# logistic function
+
+logistic_stuff = function(x = pull(dat, x), y = pull(dat, y), params = list(a = 1000, b = 2, c = 100), func = log_lik) {
+  dat %>% group_by(country_region, province_state)
+  t = 0
+  while (y > 0) {
+    t = t + 1
+  }
+  u = params$a / (1 + exp(-params$b * (t - params$c)))
+  expu = exp(u)
+  loglik = func(y, params)
+  p = expu/(1 + expu)
+  grad = rep(0, 3)
+  for (i in 1:length(grad)) {
+    grad[i] = sum(t(x[,i]) %*% (y - p))
+  }
+  return(grad)
+}
+  Hess <- matrix(0, length(grad), length(grad))
+  for (i in 1:nrow(X)) {
+    Hess = Hess - X[i,] %*% t(X[i,]) * p[i] * (1 - p[i])
+  }
+  return(list(loglik = loglik, grad = grad, Hess = Hess))
+}
+
+logistic_stuff()
+
+dat %>% 
+  group_by(country_region, province_state) %>% 
+  filter(confirmed_cases == 0)
+
+pull(dat, confirmed_cases)
+
+logistic_stuff()
+
+  u = params$a / (1 +  exp(-params$b * (t - params$c)))
+  
+}
+```
+
+## Clustering
+
+```{r, eval = FALSE}
+int_slope_df <- int_slope_dat %>% 
+  nest(data = year:ppp) %>%
+  mutate(
+    models = map(data, ~lm(ppp ~ year, data = .x)),
+    result = map(models, broom::tidy)
+  ) %>% 
+  select(county, result) %>% 
+  unnest(result) %>% 
+  select(county, term, estimate) %>% 
+  pivot_wider(
+    names_from = term,
+    values_from = estimate
+  ) %>% 
+  rename(int = "(Intercept)", slope = year)
+# Cluster data by intercept and slope #
+km_fit = 
+  kmeans(
+    int_slope_df[,c(2,3)]  %>% scale, 
+    centers = 3)
+int_slope_df =
+  broom::augment(km_fit, int_slope_df)
+# Create a ggplot of the pills data #
+pills_plot <- left_join(int_slope_dat, int_slope_df) %>% 
+  group_by(county) %>% 
+  ggplot(aes(x = year, y = ppp, color = .cluster, text = county)) + 
+  geom_point() + 
+  geom_path() +
+  scale_x_continuous(breaks = c(0, 1, 2, 3, 4, 5, 6), labels = c("2006", "2007", "2008", "2009", "2010", "2011", "2012")) +
+  theme(legend.position = "none") +
+  xlab("Year") +
+  ylab("Pills Bought Per Person")
+ggplotly(pills_plot, tooltip = "text")
+```
+
+
